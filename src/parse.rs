@@ -220,3 +220,50 @@ mod root_tests {
         assert_eq!(items[0].display_name(), items[0].guid.as_deref());
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod volume_tests {
+    use super::*;
+    use crate::ShellItemKind;
+
+    /// Build a 0x2F drive-letter volume item: class 0x2F then a 20-byte ASCII
+    /// volume name (NUL-terminated, zero-padded) per libfwsi.
+    fn volume_2f(name: &str) -> Vec<u8> {
+        let mut field = [0u8; 20];
+        for (i, b) in name.bytes().enumerate().take(19) {
+            field[i] = b;
+        }
+        let mut v = Vec::new();
+        let cb = (3 + field.len()) as u16;
+        v.extend_from_slice(&cb.to_le_bytes());
+        v.push(0x2F);
+        v.extend_from_slice(&field);
+        v.extend_from_slice(&[0u8, 0u8]);
+        v
+    }
+
+    #[test]
+    fn drive_letter_volume_decodes_name() {
+        let blob = volume_2f("C:\\");
+        let items = parse_idlist(&blob);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ShellItemKind::Volume);
+        assert_eq!(items[0].class, 0x2F);
+        assert_eq!(items[0].name.as_deref(), Some("C:\\"));
+        assert_eq!(items[0].display_name(), Some("C:\\"));
+    }
+
+    #[test]
+    fn volume_2e_is_classified_as_volume() {
+        // 0x2E variant: still major-class volume (0x20). We classify the kind
+        // even though its inner layout (a GUID) is not name-decoded here.
+        let mut v = Vec::new();
+        v.extend_from_slice(&(3u16 + 16).to_le_bytes());
+        v.push(0x2E);
+        v.extend_from_slice(&[0u8; 16]);
+        v.extend_from_slice(&[0u8, 0u8]);
+        let items = parse_idlist(&v);
+        assert_eq!(items[0].kind, ShellItemKind::Volume);
+    }
+}
