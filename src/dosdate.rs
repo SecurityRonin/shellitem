@@ -25,18 +25,18 @@ pub(crate) fn fat_to_epoch(value: u32) -> Option<i64> {
     if value == 0 {
         return None;
     }
-    let time = (value & 0xFFFF) as u32;
-    let date = (value >> 16) as u32;
+    let time = value & 0xFFFF;
+    let date = value >> 16;
 
-    let second = ((time & 0x1F) * 2) as u64;
-    let minute = ((time >> 5) & 0x3F) as u64;
-    let hour = ((time >> 11) & 0x1F) as u64;
+    let second = u64::from((time & 0x1F) * 2);
+    let minute = u64::from((time >> 5) & 0x3F);
+    let hour = u64::from((time >> 11) & 0x1F);
 
-    let day = (date & 0x1F) as u64;
-    let month = ((date >> 5) & 0x0F) as u64;
-    let year = 1980 + ((date >> 9) & 0x7F) as u64;
+    let day = u64::from(date & 0x1F);
+    let month = u64::from((date >> 5) & 0x0F);
+    let year = 1980 + u64::from((date >> 9) & 0x7F);
 
-    if month < 1 || month > 12 || day < 1 || day > 31 {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
 
@@ -61,18 +61,4 @@ pub(crate) fn fat_to_epoch(value: u32) -> Option<i64> {
 /// Whether `year` is a Gregorian leap year.
 fn is_leap(year: u64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-/// Convert a 64-bit Windows `FILETIME` (100-ns intervals since 1601-01-01 UTC)
-/// to Unix epoch seconds. Used by the newer `0xbeef0026`-style full-FILETIME
-/// timestamps. Returns `None` for a `0` value (no timestamp).
-#[must_use]
-pub(crate) fn filetime_to_epoch(value: u64) -> Option<i64> {
-    if value == 0 {
-        return None;
-    }
-    // 11_644_473_600 = seconds between 1601-01-01 and 1970-01-01.
-    let secs_since_1601 = value / 10_000_000;
-    let epoch = i64::try_from(secs_since_1601).ok()? - 11_644_473_600;
-    Some(epoch)
 }

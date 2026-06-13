@@ -40,10 +40,9 @@
 //! ```
 //! use shellitem::{parse_idlist, reconstruct_path};
 //!
+//! # let pidl_bytes: &[u8] = &[0, 0]; // an empty ITEMIDLIST (terminator only)
 //! let items = parse_idlist(pidl_bytes);
 //! let path = reconstruct_path(&items);
-//! # fn _doc(pidl_bytes: &[u8]) {}
-//! # let pidl_bytes: &[u8] = &[0, 0];
 //! ```
 
 mod dosdate;

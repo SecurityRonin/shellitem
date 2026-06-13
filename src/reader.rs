@@ -26,16 +26,6 @@ pub(crate) fn le_u32(data: &[u8], off: usize) -> u32 {
     u32::from_le_bytes(b)
 }
 
-/// Read a little-endian `u64` at `off`, or `0` if out of range.
-#[must_use]
-pub(crate) fn le_u64(data: &[u8], off: usize) -> u64 {
-    let mut b = [0u8; 8];
-    if let Some(s) = data.get(off..off.wrapping_add(8)) {
-        b.copy_from_slice(s);
-    }
-    u64::from_le_bytes(b)
-}
-
 /// Read a 48-bit little-endian unsigned integer at `off`, or `0` if out of
 /// range. Used for the NTFS MFT entry index in the `0xbeef0004` file
 /// reference (6 bytes entry + 2 bytes sequence).

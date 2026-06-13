@@ -159,13 +159,15 @@ fn parse_beef0004(item: &mut ShellItem, block_start: usize) {
     item.accessed = dosdate::fat_to_epoch(reader::le_u32(&data, block_off + 12));
 
     // Long name offset is relative to the start of the extension block.
+    // `saturating_add` is infallible-by-construction: an over-large offset
+    // saturates to usize::MAX, and `utf16_z` then bounds-checks it to an empty
+    // string — no panic, no out-of-bounds, no unreachable error arm to guard.
     let long_name_offset = reader::le_u16(&data, block_off + 16) as usize;
     if long_name_offset != 0 {
-        if let Some(abs) = block_off.checked_add(long_name_offset) {
-            let long = reader::utf16_z(&data, abs);
-            if !long.is_empty() {
-                item.long_name = Some(long);
-            }
+        let abs = block_off.saturating_add(long_name_offset);
+        let long = reader::utf16_z(&data, abs);
+        if !long.is_empty() {
+            item.long_name = Some(long);
         }
     }
 
@@ -468,10 +470,8 @@ mod file_entry_tests {
 
     /// Encode a packed FAT date/time (UTC). day 1-31, month 1-12, year>=1980.
     fn fat(year: u16, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> u32 {
-        let date: u16 =
-            ((year - 1980) << 9) | (u16::from(month) << 5) | u16::from(day);
-        let time: u16 =
-            (u16::from(hour) << 11) | (u16::from(minute) << 5) | u16::from(second / 2);
+        let date: u16 = ((year - 1980) << 9) | (u16::from(month) << 5) | u16::from(day);
+        let time: u16 = (u16::from(hour) << 11) | (u16::from(minute) << 5) | u16::from(second / 2);
         (u32::from(date) << 16) | u32::from(time)
     }
 
@@ -479,6 +479,7 @@ mod file_entry_tests {
     /// (version 8 → carries the NTFS file reference) per libfwsi.
     ///
     /// Returns the framed item bytes (no list terminator).
+    #[allow(clippy::too_many_arguments)]
     fn file_entry_with_beef0004(
         short: &str,
         long: &str,
@@ -496,7 +497,7 @@ mod file_entry_tests {
         body.extend_from_slice(&size.to_le_bytes()); // offset 4
         body.extend_from_slice(&modified.to_le_bytes()); // offset 8
         body.extend_from_slice(&0x0020u16.to_le_bytes()); // attrs (offset 12) ARCHIVE
-        // primary (short) name, ASCII NUL-terminated, 16-bit aligned (offset 14)
+                                                          // primary (short) name, ASCII NUL-terminated, 16-bit aligned (offset 14)
         body.extend_from_slice(short.as_bytes());
         body.push(0x00);
         if body.len() % 2 != 0 {
@@ -512,21 +513,21 @@ mod file_entry_tests {
         block.extend_from_slice(&0xBEEF_0004u32.to_le_bytes()); // signature (offset 4)
         block.extend_from_slice(&created.to_le_bytes()); // creation FAT (offset 8)
         block.extend_from_slice(&accessed.to_le_bytes()); // access FAT (offset 12)
-        // long name offset placeholder (offset 16) — filled after we know it
+                                                          // long name offset placeholder (offset 16) — filled after we know it
         let long_name_off_pos = block.len();
         block.extend_from_slice(&[0u8, 0u8]);
         // version >= 7: 2 unknown bytes (offset 18) + 8-byte file reference (offset 20)
         block.extend_from_slice(&[0u8, 0u8]); // unknown
         block.extend_from_slice(&mft_entry.to_le_bytes()[..6]); // 6-byte MFT entry
         block.extend_from_slice(&mft_seq.to_le_bytes()); // 2-byte sequence
-        // long name (UTF-16LE, NUL-terminated)
+                                                         // long name (UTF-16LE, NUL-terminated)
         let long_name_offset_in_block = block.len() as u16;
         for u in long.encode_utf16() {
             block.extend_from_slice(&u.to_le_bytes());
         }
         block.extend_from_slice(&[0u8, 0u8]); // UTF-16 NUL
-        // first extension block offset (relative to start of shell item, i.e.
-        // start of body + 2 for the cb prefix). 2-byte trailer.
+                                              // first extension block offset (relative to start of shell item, i.e.
+                                              // start of body + 2 for the cb prefix). 2-byte trailer.
         let first_ext_off = (2 + block_start_in_body) as u16;
         block.extend_from_slice(&first_ext_off.to_le_bytes());
 
@@ -555,7 +556,14 @@ mod file_entry_tests {
     fn decodes_short_name_size_and_modified() {
         let modified = fat(2024, 3, 14, 9, 26, 30);
         let item = file_entry_with_beef0004(
-            "SECRET~1.DOC", "secret report.docx", 4096, modified, 0, 0, 0, 0,
+            "SECRET~1.DOC",
+            "secret report.docx",
+            4096,
+            modified,
+            0,
+            0,
+            0,
+            0,
         );
         let items = parse_idlist(&list_one(item));
         assert_eq!(items.len(), 1);
@@ -569,9 +577,8 @@ mod file_entry_tests {
 
     #[test]
     fn decodes_long_name_from_beef0004() {
-        let item = file_entry_with_beef0004(
-            "SECRET~1.DOC", "secret report.docx", 4096, 0, 0, 0, 0, 0,
-        );
+        let item =
+            file_entry_with_beef0004("SECRET~1.DOC", "secret report.docx", 4096, 0, 0, 0, 0, 0);
         let items = parse_idlist(&list_one(item));
         assert_eq!(items[0].long_name.as_deref(), Some("secret report.docx"));
         // display_name prefers the long name.
@@ -582,9 +589,7 @@ mod file_entry_tests {
     fn decodes_created_and_accessed_timestamps() {
         let created = fat(2020, 1, 2, 3, 4, 10);
         let accessed = fat(2025, 12, 31, 23, 58, 0);
-        let item = file_entry_with_beef0004(
-            "F~1.TXT", "file.txt", 10, 0, created, accessed, 0, 0,
-        );
+        let item = file_entry_with_beef0004("F~1.TXT", "file.txt", 10, 0, created, accessed, 0, 0);
         let items = parse_idlist(&list_one(item));
         assert_eq!(items[0].created, Some(1_577_934_250)); // 2020-01-02 03:04:10
         assert_eq!(items[0].accessed, Some(1_767_225_480)); // 2025-12-31 23:58:00
@@ -592,9 +597,8 @@ mod file_entry_tests {
 
     #[test]
     fn decodes_mft_entry_and_sequence() {
-        let item = file_entry_with_beef0004(
-            "F~1.TXT", "file.txt", 10, 0, 0, 0, 0x1234_5678_9ABC, 0x0007,
-        );
+        let item =
+            file_entry_with_beef0004("F~1.TXT", "file.txt", 10, 0, 0, 0, 0x1234_5678_9ABC, 0x0007);
         let items = parse_idlist(&list_one(item));
         assert_eq!(items[0].mft_entry, Some(0x1234_5678_9ABC));
         assert_eq!(items[0].mft_sequence, Some(0x0007));
@@ -610,10 +614,7 @@ mod file_entry_tests {
         body.extend_from_slice(&100u32.to_le_bytes());
         body.extend_from_slice(&0u32.to_le_bytes());
         body.extend_from_slice(&0u16.to_le_bytes());
-        body.extend_from_slice(b"OLD~1.TXT\0");
-        if body.len() % 2 != 0 {
-            body.push(0);
-        }
+        body.extend_from_slice(b"OLD~1.TXT\0"); // 10 bytes -> body already 16-bit aligned
         let mut block = Vec::new();
         block.extend_from_slice(&[0u8, 0u8]); // size
         block.extend_from_slice(&3u16.to_le_bytes()); // version 3
@@ -659,6 +660,47 @@ mod file_entry_tests {
         assert_eq!(items[0].name.as_deref(), Some("BARE.TXT"));
         assert_eq!(items[0].file_size, Some(55));
         assert!(items[0].long_name.is_none());
+    }
+
+    #[test]
+    fn unicode_class_0xb1_decodes_utf16_short_name() {
+        // 0xB1 stores the primary name as UTF-16 (libfwsi). No extension block.
+        let mut body = Vec::new();
+        body.push(0xB1);
+        body.push(0x00);
+        body.extend_from_slice(&7u32.to_le_bytes()); // size
+        body.extend_from_slice(&0u32.to_le_bytes()); // modified
+        body.extend_from_slice(&0u16.to_le_bytes()); // attrs
+        for u in "café.txt".encode_utf16() {
+            body.extend_from_slice(&u.to_le_bytes());
+        }
+        body.extend_from_slice(&[0u8, 0u8]); // UTF-16 NUL
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].kind, ShellItemKind::FileEntry);
+        assert_eq!(items[0].name.as_deref(), Some("café.txt"));
+    }
+
+    #[test]
+    fn malformed_fat_modified_yields_none_not_panic() {
+        // A modification field with month 0 / day 0 is malformed — it must
+        // decode to None, never a bogus timestamp or a panic. The non-zero
+        // value avoids the "0 == no timestamp" path so the range check runs.
+        let mut body = Vec::new();
+        body.push(0x32);
+        body.push(0x00);
+        body.extend_from_slice(&0u32.to_le_bytes());
+        // date high word = 0x0000 (year 1980, month 0, day 0), time = 0x0001.
+        body.extend_from_slice(&0x0000_0001u32.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(b"X\0");
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+        let items = parse_idlist(&list_one(item));
+        assert!(items[0].modified.is_none());
     }
 
     #[test]
