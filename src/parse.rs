@@ -1,7 +1,7 @@
 //! `ITEMIDLIST` framing and per-class shell-item decoding.
 
 use crate::reader;
-use crate::{ShellItem, ShellItemKind};
+use crate::{dosdate, ShellItem, ShellItemKind};
 use forensicnomicon::shellbags;
 
 /// Parse a Windows `ITEMIDLIST` (PIDL) blob into its sequence of shell items.
@@ -77,11 +77,103 @@ fn known_folder_name(guid: &str) -> Option<&'static str> {
 }
 
 fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
+    if shellbags::is_file_entry(class) {
+        return decode_file_entry(class, raw);
+    }
     match class {
         shellbags::CLASS_ROOT_FOLDER => decode_root(class, raw),
         shellbags::CLASS_VOLUME_2E | shellbags::CLASS_VOLUME_2F => decode_volume(class, raw),
         _ => blank(class, ShellItemKind::Unknown, raw),
     }
+}
+
+/// Decode a file-entry item (major class `0x30`: `0x31` dir, `0x32` file,
+/// `0x35`/`0x36`, `0xb1` Unicode). Reads the fixed-offset short name, file
+/// size and FAT modification time, then parses the trailing `0xbeef0004`
+/// extension block (long name, create/access times, NTFS MFT reference).
+fn decode_file_entry(class: u8, raw: Vec<u8>) -> ShellItem {
+    let mut item = blank(class, ShellItemKind::FileEntry, raw);
+    let data = &item.raw;
+
+    item.file_size = Some(reader::le_u32(data, 4));
+    item.modified = dosdate::fat_to_epoch(reader::le_u32(data, 8));
+
+    // Primary (short) name at offset 14. The 0xb1 Unicode class stores it as
+    // UTF-16; the classic 0x31/0x32 classes store ASCII (libfwsi).
+    let (short, short_end) = if class == shellbags::CLASS_FILE_ENTRY_UNICODE {
+        let s = reader::utf16_z(data, 14);
+        let consumed = (s.encode_utf16().count() + 1) * 2;
+        (s, 14 + consumed)
+    } else {
+        let s = reader::ascii_z(data, 14);
+        // ASCII string + its NUL, then 16-bit aligned (a padding zero may
+        // follow so the extension block starts on an even offset).
+        let mut end = 14 + s.len() + 1;
+        if end % 2 != 0 {
+            end += 1;
+        }
+        (s, end)
+    };
+    if !short.is_empty() {
+        item.name = Some(short);
+    }
+
+    parse_beef0004(&mut item, short_end);
+    item
+}
+
+/// Parse the `0xbeef0004` file-entry extension block, if present, starting at
+/// or near `block_start`. Fills the long name, create/access timestamps and
+/// the NTFS MFT reference. Tolerant of a slightly-off `block_start`: the
+/// block is accepted only when its signature validates, and is otherwise
+/// located by scanning the item bytes for the `0xbeef0004` signature.
+fn parse_beef0004(item: &mut ShellItem, block_start: usize) {
+    let data = item.raw.clone();
+    let Some(block_off) = locate_beef0004(&data, block_start) else {
+        return;
+    };
+
+    let version = reader::le_u16(&data, block_off + 2);
+    item.created = dosdate::fat_to_epoch(reader::le_u32(&data, block_off + 8));
+    item.accessed = dosdate::fat_to_epoch(reader::le_u32(&data, block_off + 12));
+
+    // Long name offset is relative to the start of the extension block.
+    let long_name_offset = reader::le_u16(&data, block_off + 16) as usize;
+    if long_name_offset != 0 {
+        if let Some(abs) = block_off.checked_add(long_name_offset) {
+            let long = reader::utf16_z(&data, abs);
+            if !long.is_empty() {
+                item.long_name = Some(long);
+            }
+        }
+    }
+
+    // Version >= 7 carries 2 unknown bytes then the 8-byte NTFS file reference
+    // (6-byte MFT entry index + 2-byte sequence number) at block+20.
+    if version >= 7 {
+        let entry = reader::le_u48(&data, block_off + 20);
+        let seq = reader::le_u16(&data, block_off + 26);
+        // A zero file reference is the "absent" sentinel — leave the fields None.
+        if entry != 0 || seq != 0 {
+            item.mft_entry = Some(entry);
+            item.mft_sequence = Some(seq);
+        }
+    }
+}
+
+/// Locate the `0xbeef0004` extension block within a file-entry item. Tries the
+/// computed `hint` offset first (verifying the signature at `hint + 4`), then
+/// falls back to scanning for the little-endian signature bytes. Returns the
+/// block start offset, or `None` if no valid block is found.
+fn locate_beef0004(data: &[u8], hint: usize) -> Option<usize> {
+    let sig = shellbags::EXTENSION_BLOCK_0XBEEF0004.to_le_bytes();
+    if reader::le_u32(data, hint.wrapping_add(4)) == shellbags::EXTENSION_BLOCK_0XBEEF0004 {
+        return Some(hint);
+    }
+    // Fallback: scan for the signature; the block starts 4 bytes before it.
+    data.windows(4)
+        .position(|w| w == sig)
+        .and_then(|p| p.checked_sub(4))
 }
 
 /// Decode a volume item (`0x2e`/`0x2f`). For the drive-letter form (`0x2f`)
