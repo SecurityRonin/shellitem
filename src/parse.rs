@@ -39,9 +39,11 @@ pub fn parse_idlist(data: &[u8]) -> Vec<ShellItem> {
 /// item's best display name with `\`.
 #[must_use]
 pub fn reconstruct_path(items: &[ShellItem]) -> String {
-    // stub — implemented in GREEN
-    let _ = items;
-    String::new()
+    items
+        .iter()
+        .filter_map(ShellItem::display_name)
+        .collect::<Vec<_>>()
+        .join("\\")
 }
 
 /// A freshly-constructed `ShellItem` with the given class/kind and the raw
