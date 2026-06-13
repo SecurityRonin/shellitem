@@ -1,0 +1,45 @@
+[package]
+name = "shellitem"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "Apache-2.0"
+authors = ["Albert Hui <albert@securityronin.com>"]
+description = "Windows Shell Item / ITEMIDLIST (PIDL) parser — decode shell-item blobs from .lnk LinkTargetIDList and registry ShellBags into typed items and a reconstructed path. A reusable forensic primitive, no findings."
+repository = "https://github.com/SecurityRonin/shellitem"
+homepage = "https://github.com/SecurityRonin/shellitem"
+readme = "README.md"
+keywords = ["forensics", "shell-item", "pidl", "itemidlist", "windows"]
+categories = ["parser-implementations"]
+exclude = ["/tests/data", "/fuzz", "/docs", "/.github", "/mkdocs.yml", "/.pre-commit-config.yaml", "/renovate.json"]
+
+[dependencies]
+forensicnomicon = "0.5.1"
+
+# ── Paranoid Gatekeeper ──────────────────────────────────────────────────────
+# This crate parses untrusted, attacker-controllable shell-item blobs lifted
+# from .lnk LinkTargetIDList structures and registry ShellBags values.
+# Never panic, never read out of bounds, never trust the `cb` length field.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all                      = { level = "warn", priority = -1 }
+pedantic                 = { level = "warn", priority = -1 }
+correctness              = { level = "deny", priority = -1 }
+suspicious               = { level = "deny", priority = -1 }
+unwrap_used              = { level = "deny", priority = 0 }
+expect_used              = { level = "deny", priority = 0 }
+module_name_repetitions  = { level = "allow", priority = 1 }
+must_use_candidate       = { level = "allow", priority = 1 }
+missing_errors_doc       = { level = "allow", priority = 1 }
+missing_panics_doc       = { level = "allow", priority = 1 }
+doc_markdown             = { level = "allow", priority = 1 }
+cast_possible_truncation = { level = "allow", priority = 1 }
+cast_possible_wrap       = { level = "allow", priority = 1 }
+cast_sign_loss           = { level = "allow", priority = 1 }
+cast_precision_loss      = { level = "allow", priority = 1 }
+too_many_lines           = { level = "allow", priority = 1 }
+items_after_statements   = { level = "allow", priority = 1 }
+similar_names            = { level = "allow", priority = 1 }
+manual_let_else          = { level = "allow", priority = 1 }
