@@ -123,3 +123,65 @@ mod framing_tests {
         assert_eq!(items[0].raw, raw0);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod root_tests {
+    use super::*;
+    use crate::ShellItemKind;
+
+    /// The My-Computer GUID `20D04FE0-3AEA-1069-A2D8-08002B30309D` in on-disk
+    /// mixed-endian byte order (first three groups little-endian).
+    const MY_COMPUTER_BYTES: [u8; 16] = [
+        0xE0, 0x4F, 0xD0, 0x20, // 20D04FE0 (LE)
+        0xEA, 0x3A, // 3AEA (LE)
+        0x69, 0x10, // 1069 (LE)
+        0xA2, 0xD8, // A2D8 (BE)
+        0x08, 0x00, 0x2B, 0x30, 0x30, 0x9D, // 08002B30309D (BE)
+    ];
+
+    fn root_item(sort: u8, guid: &[u8; 16]) -> Vec<u8> {
+        let mut data = vec![sort];
+        data.extend_from_slice(guid);
+        // frame: cb = 2 + 1(class) + 1(sort) + 16(guid)
+        let cb = (3 + data.len()) as u16;
+        let mut v = cb.to_le_bytes().to_vec();
+        v.push(0x1F);
+        v.extend_from_slice(&data);
+        v.extend_from_slice(&[0u8, 0u8]); // terminator
+        v
+    }
+
+    #[test]
+    fn root_item_decodes_guid_and_kind() {
+        let blob = root_item(0x00, &MY_COMPUTER_BYTES);
+        let items = parse_idlist(&blob);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ShellItemKind::Root);
+        assert_eq!(
+            items[0].guid.as_deref(),
+            Some("20D04FE0-3AEA-1069-A2D8-08002B30309D")
+        );
+    }
+
+    #[test]
+    fn my_computer_guid_maps_to_display_name() {
+        let blob = root_item(0x00, &MY_COMPUTER_BYTES);
+        let items = parse_idlist(&blob);
+        // "My Computer" is the canonical display name for the My-Computer GUID.
+        assert_eq!(items[0].name.as_deref(), Some("My Computer"));
+        assert_eq!(items[0].display_name(), Some("My Computer"));
+    }
+
+    #[test]
+    fn unknown_root_guid_has_no_name_but_keeps_guid() {
+        let other = [0x11u8; 16];
+        let blob = root_item(0x00, &other);
+        let items = parse_idlist(&blob);
+        assert_eq!(items[0].kind, ShellItemKind::Root);
+        assert!(items[0].name.is_none());
+        assert!(items[0].guid.is_some());
+        // display_name falls back to the GUID string.
+        assert_eq!(items[0].display_name(), items[0].guid.as_deref());
+    }
+}
