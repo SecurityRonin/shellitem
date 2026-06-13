@@ -282,3 +282,222 @@ mod volume_tests {
         assert_eq!(items[0].kind, ShellItemKind::Volume);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod file_entry_tests {
+    use super::*;
+    use crate::ShellItemKind;
+
+    /// Encode a packed FAT date/time (UTC). day 1-31, month 1-12, year>=1980.
+    fn fat(year: u16, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> u32 {
+        let date: u16 =
+            ((year - 1980) << 9) | (u16::from(month) << 5) | u16::from(day);
+        let time: u16 =
+            (u16::from(hour) << 11) | (u16::from(minute) << 5) | u16::from(second / 2);
+        (u32::from(date) << 16) | u32::from(time)
+    }
+
+    /// Build a spec-exact 0x32 file-entry item with a beef0004 extension block
+    /// (version 8 → carries the NTFS file reference) per libfwsi.
+    ///
+    /// Returns the framed item bytes (no list terminator).
+    fn file_entry_with_beef0004(
+        short: &str,
+        long: &str,
+        size: u32,
+        modified: u32,
+        created: u32,
+        accessed: u32,
+        mft_entry: u64,
+        mft_seq: u16,
+    ) -> Vec<u8> {
+        // ── item body (starting at offset 2, the class byte) ──
+        let mut body = Vec::new();
+        body.push(0x32); // class (offset 2)
+        body.push(0x00); // unknown (offset 3)
+        body.extend_from_slice(&size.to_le_bytes()); // offset 4
+        body.extend_from_slice(&modified.to_le_bytes()); // offset 8
+        body.extend_from_slice(&0x0020u16.to_le_bytes()); // attrs (offset 12) ARCHIVE
+        // primary (short) name, ASCII NUL-terminated, 16-bit aligned (offset 14)
+        body.extend_from_slice(short.as_bytes());
+        body.push(0x00);
+        if body.len() % 2 != 0 {
+            body.push(0x00); // 16-bit alignment pad
+        }
+
+        // ── beef0004 extension block (version 8) ──
+        let block_start_in_body = body.len();
+        let mut block = Vec::new();
+        // size placeholder (offset 0)
+        block.extend_from_slice(&[0u8, 0u8]);
+        block.extend_from_slice(&8u16.to_le_bytes()); // version 8 (offset 2)
+        block.extend_from_slice(&0xBEEF_0004u32.to_le_bytes()); // signature (offset 4)
+        block.extend_from_slice(&created.to_le_bytes()); // creation FAT (offset 8)
+        block.extend_from_slice(&accessed.to_le_bytes()); // access FAT (offset 12)
+        // long name offset placeholder (offset 16) — filled after we know it
+        let long_name_off_pos = block.len();
+        block.extend_from_slice(&[0u8, 0u8]);
+        // version >= 7: 2 unknown bytes (offset 18) + 8-byte file reference (offset 20)
+        block.extend_from_slice(&[0u8, 0u8]); // unknown
+        block.extend_from_slice(&mft_entry.to_le_bytes()[..6]); // 6-byte MFT entry
+        block.extend_from_slice(&mft_seq.to_le_bytes()); // 2-byte sequence
+        // long name (UTF-16LE, NUL-terminated)
+        let long_name_offset_in_block = block.len() as u16;
+        for u in long.encode_utf16() {
+            block.extend_from_slice(&u.to_le_bytes());
+        }
+        block.extend_from_slice(&[0u8, 0u8]); // UTF-16 NUL
+        // first extension block offset (relative to start of shell item, i.e.
+        // start of body + 2 for the cb prefix). 2-byte trailer.
+        let first_ext_off = (2 + block_start_in_body) as u16;
+        block.extend_from_slice(&first_ext_off.to_le_bytes());
+
+        // patch block size + long-name offset
+        let block_size = block.len() as u16;
+        block[0..2].copy_from_slice(&block_size.to_le_bytes());
+        block[long_name_off_pos..long_name_off_pos + 2]
+            .copy_from_slice(&long_name_offset_in_block.to_le_bytes());
+
+        body.extend_from_slice(&block);
+
+        // frame with cb (= 2 + body.len())
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+        item
+    }
+
+    fn list_one(item: Vec<u8>) -> Vec<u8> {
+        let mut v = item;
+        v.extend_from_slice(&[0u8, 0u8]);
+        v
+    }
+
+    #[test]
+    fn decodes_short_name_size_and_modified() {
+        let modified = fat(2024, 3, 14, 9, 26, 30);
+        let item = file_entry_with_beef0004(
+            "SECRET~1.DOC", "secret report.docx", 4096, modified, 0, 0, 0, 0,
+        );
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items.len(), 1);
+        let it = &items[0];
+        assert_eq!(it.kind, ShellItemKind::FileEntry);
+        assert_eq!(it.name.as_deref(), Some("SECRET~1.DOC"));
+        assert_eq!(it.file_size, Some(4096));
+        // 2024-03-14 09:26:30 UTC
+        assert_eq!(it.modified, Some(1_710_408_390));
+    }
+
+    #[test]
+    fn decodes_long_name_from_beef0004() {
+        let item = file_entry_with_beef0004(
+            "SECRET~1.DOC", "secret report.docx", 4096, 0, 0, 0, 0, 0,
+        );
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].long_name.as_deref(), Some("secret report.docx"));
+        // display_name prefers the long name.
+        assert_eq!(items[0].display_name(), Some("secret report.docx"));
+    }
+
+    #[test]
+    fn decodes_created_and_accessed_timestamps() {
+        let created = fat(2020, 1, 2, 3, 4, 10);
+        let accessed = fat(2025, 12, 31, 23, 58, 0);
+        let item = file_entry_with_beef0004(
+            "F~1.TXT", "file.txt", 10, 0, created, accessed, 0, 0,
+        );
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].created, Some(1_577_934_250)); // 2020-01-02 03:04:10
+        assert_eq!(items[0].accessed, Some(1_767_225_480)); // 2025-12-31 23:58:00
+    }
+
+    #[test]
+    fn decodes_mft_entry_and_sequence() {
+        let item = file_entry_with_beef0004(
+            "F~1.TXT", "file.txt", 10, 0, 0, 0, 0x1234_5678_9ABC, 0x0007,
+        );
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].mft_entry, Some(0x1234_5678_9ABC));
+        assert_eq!(items[0].mft_sequence, Some(0x0007));
+    }
+
+    #[test]
+    fn beef0004_version3_has_no_mft_reference() {
+        // Version 3 (XP) blocks have no file reference; mft fields stay None,
+        // but the long name still decodes.
+        let mut body = Vec::new();
+        body.push(0x32);
+        body.push(0x00);
+        body.extend_from_slice(&100u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(b"OLD~1.TXT\0");
+        if body.len() % 2 != 0 {
+            body.push(0);
+        }
+        let mut block = Vec::new();
+        block.extend_from_slice(&[0u8, 0u8]); // size
+        block.extend_from_slice(&3u16.to_le_bytes()); // version 3
+        block.extend_from_slice(&0xBEEF_0004u32.to_le_bytes());
+        block.extend_from_slice(&0u32.to_le_bytes()); // created
+        block.extend_from_slice(&0u32.to_le_bytes()); // accessed
+        let lno_pos = block.len();
+        block.extend_from_slice(&[0u8, 0u8]); // long name offset
+        let lno = block.len() as u16;
+        for u in "old.txt".encode_utf16() {
+            block.extend_from_slice(&u.to_le_bytes());
+        }
+        block.extend_from_slice(&[0u8, 0u8]);
+        block.extend_from_slice(&0u16.to_le_bytes()); // first ext offset
+        let bs = block.len() as u16;
+        block[0..2].copy_from_slice(&bs.to_le_bytes());
+        block[lno_pos..lno_pos + 2].copy_from_slice(&lno.to_le_bytes());
+        body.extend_from_slice(&block);
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].long_name.as_deref(), Some("old.txt"));
+        assert!(items[0].mft_entry.is_none());
+        assert!(items[0].mft_sequence.is_none());
+    }
+
+    #[test]
+    fn file_entry_without_extension_block_still_decodes_short_name() {
+        // No beef0004: short name + size only, no long name / mft.
+        let mut body = Vec::new();
+        body.push(0x32);
+        body.push(0x00);
+        body.extend_from_slice(&55u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(b"BARE.TXT\0");
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].name.as_deref(), Some("BARE.TXT"));
+        assert_eq!(items[0].file_size, Some(55));
+        assert!(items[0].long_name.is_none());
+    }
+
+    #[test]
+    fn directory_class_0x31_is_file_entry() {
+        let mut body = Vec::new();
+        body.push(0x31); // directory
+        body.push(0x00);
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&0x10u16.to_le_bytes()); // DIRECTORY attr
+        body.extend_from_slice(b"USERS\0");
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].kind, ShellItemKind::FileEntry);
+        assert_eq!(items[0].name.as_deref(), Some("USERS"));
+    }
+}
