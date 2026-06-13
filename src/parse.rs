@@ -79,8 +79,23 @@ fn known_folder_name(guid: &str) -> Option<&'static str> {
 fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
     match class {
         shellbags::CLASS_ROOT_FOLDER => decode_root(class, raw),
+        shellbags::CLASS_VOLUME_2E | shellbags::CLASS_VOLUME_2F => decode_volume(class, raw),
         _ => blank(class, ShellItemKind::Unknown, raw),
     }
+}
+
+/// Decode a volume item (`0x2e`/`0x2f`). For the drive-letter form (`0x2f`)
+/// the 20-byte ASCII volume name starts at offset 3 (libfwsi). The `0x2e`
+/// GUID form is classified but not name-decoded.
+fn decode_volume(class: u8, raw: Vec<u8>) -> ShellItem {
+    let mut item = blank(class, ShellItemKind::Volume, raw);
+    if class == shellbags::CLASS_VOLUME_2F {
+        let name = reader::ascii_z(&item.raw, 3);
+        if !name.is_empty() {
+            item.name = Some(name);
+        }
+    }
+    item
 }
 
 /// Decode a root / known-folder item (`0x1f`): a 1-byte sort index followed by
