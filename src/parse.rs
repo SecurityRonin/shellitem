@@ -80,11 +80,30 @@ fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
     if shellbags::is_file_entry(class) {
         return decode_file_entry(class, raw);
     }
+    if class == shellbags::CLASS_NETWORK_LOCATION {
+        return decode_network(class, raw);
+    }
     match class {
         shellbags::CLASS_ROOT_FOLDER => decode_root(class, raw),
         shellbags::CLASS_VOLUME_2E | shellbags::CLASS_VOLUME_2F => decode_volume(class, raw),
-        _ => blank(class, ShellItemKind::Unknown, raw),
+        _ => match shellbags::major_class(class) {
+            shellbags::MAJOR_CLASS_URI => blank(class, ShellItemKind::Uri, raw),
+            shellbags::MAJOR_CLASS_CONTROL_PANEL => blank(class, ShellItemKind::ControlPanel, raw),
+            _ => blank(class, ShellItemKind::Unknown, raw),
+        },
     }
+}
+
+/// Decode a network-location item (`0xc3`): a 1-byte flags field at offset 3
+/// followed by an ASCII NUL-terminated UNC/network location string at offset 4,
+/// and an optional comment string immediately after it (libfwsi).
+fn decode_network(class: u8, raw: Vec<u8>) -> ShellItem {
+    let mut item = blank(class, ShellItemKind::Network, raw);
+    let location = reader::ascii_z(&item.raw, 4);
+    if !location.is_empty() {
+        item.name = Some(location);
+    }
+    item
 }
 
 /// Decode a file-entry item (major class `0x30`: `0x31` dir, `0x32` file,
