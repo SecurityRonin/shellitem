@@ -1,6 +1,8 @@
 //! `ITEMIDLIST` framing and per-class shell-item decoding.
 
+use crate::reader;
 use crate::{ShellItem, ShellItemKind};
+use forensicnomicon::shellbags;
 
 /// Parse a Windows `ITEMIDLIST` (PIDL) blob into its sequence of shell items.
 ///
@@ -42,10 +44,13 @@ pub fn reconstruct_path(items: &[ShellItem]) -> String {
     String::new()
 }
 
-fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
+/// A freshly-constructed `ShellItem` with the given class/kind and the raw
+/// bytes attached; every optional field starts empty for the per-class decoder
+/// to fill in.
+fn blank(class: u8, kind: ShellItemKind, raw: Vec<u8>) -> ShellItem {
     ShellItem {
         class,
-        kind: ShellItemKind::Unknown,
+        kind,
         name: None,
         long_name: None,
         file_size: None,
@@ -57,6 +62,36 @@ fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
         guid: None,
         raw,
     }
+}
+
+/// Map a well-known shell-folder GUID to its canonical display name. Only the
+/// universally-stable My-Computer / "This PC" GUID is hard-named here (sourced
+/// from [`forensicnomicon::shellbags::MY_COMPUTER_GUID`]); every other GUID is
+/// surfaced verbatim so consumers can resolve it against their own CLSID map.
+fn known_folder_name(guid: &str) -> Option<&'static str> {
+    if guid.eq_ignore_ascii_case(shellbags::MY_COMPUTER_GUID) {
+        Some("My Computer")
+    } else {
+        None
+    }
+}
+
+fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
+    match class {
+        shellbags::CLASS_ROOT_FOLDER => decode_root(class, raw),
+        _ => blank(class, ShellItemKind::Unknown, raw),
+    }
+}
+
+/// Decode a root / known-folder item (`0x1f`): a 1-byte sort index followed by
+/// a 16-byte shell-folder GUID at offset 4 (libfwsi).
+fn decode_root(class: u8, raw: Vec<u8>) -> ShellItem {
+    let mut item = blank(class, ShellItemKind::Root, raw);
+    if let Some(guid) = reader::guid(&item.raw, 4) {
+        item.name = known_folder_name(&guid).map(ToString::to_string);
+        item.guid = Some(guid);
+    }
+    item
 }
 
 #[cfg(test)]
