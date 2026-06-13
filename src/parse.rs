@@ -593,3 +593,54 @@ mod file_entry_tests {
         assert_eq!(items[0].name.as_deref(), Some("USERS"));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod other_class_tests {
+    use super::*;
+    use crate::ShellItemKind;
+
+    fn framed(class: u8, body: &[u8]) -> Vec<u8> {
+        let cb = (3 + body.len()) as u16;
+        let mut v = cb.to_le_bytes().to_vec();
+        v.push(class);
+        v.extend_from_slice(body);
+        v.extend_from_slice(&[0u8, 0u8]);
+        v
+    }
+
+    #[test]
+    fn network_0xc3_decodes_unc_location() {
+        // 0xC3 network: offset 3 = flags byte, offset 4 = ASCII NUL-term
+        // location string (libfwsi).
+        let mut body = Vec::new();
+        body.push(0x00); // flags (offset 3)
+        body.extend_from_slice(b"\\\\SERVER\\share\0"); // location (offset 4)
+        let items = parse_idlist(&framed(0xC3, &body));
+        assert_eq!(items[0].kind, ShellItemKind::Network);
+        assert_eq!(items[0].name.as_deref(), Some("\\\\SERVER\\share"));
+    }
+
+    #[test]
+    fn uri_major_class_0x61_is_classified_uri() {
+        let items = parse_idlist(&framed(0x61, &[0u8; 8]));
+        assert_eq!(items[0].kind, ShellItemKind::Uri);
+    }
+
+    #[test]
+    fn control_panel_major_class_0x71_is_classified() {
+        let items = parse_idlist(&framed(0x71, &[0u8; 8]));
+        assert_eq!(items[0].kind, ShellItemKind::ControlPanel);
+    }
+
+    #[test]
+    fn unknown_class_surfaces_class_byte_and_raw() {
+        let body = [0xDEu8, 0xAD, 0xBE, 0xEF];
+        let items = parse_idlist(&framed(0x99, &body));
+        assert_eq!(items[0].kind, ShellItemKind::Unknown);
+        assert_eq!(items[0].class, 0x99);
+        // raw includes the cb prefix (3+4=7) and the class byte.
+        assert_eq!(items[0].raw[2], 0x99);
+        assert_eq!(&items[0].raw[3..7], &body);
+    }
+}
