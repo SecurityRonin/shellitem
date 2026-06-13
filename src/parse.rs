@@ -11,9 +11,26 @@ use crate::{ShellItem, ShellItemKind};
 /// decoded so far. It never panics on malformed input.
 #[must_use]
 pub fn parse_idlist(data: &[u8]) -> Vec<ShellItem> {
-    // stub — implemented in GREEN
-    let _ = data;
-    Vec::new()
+    let mut items = Vec::new();
+    let mut pos = 0usize;
+    while pos + 2 <= data.len() {
+        let cb = crate::reader::le_u16(data, pos) as usize;
+        if cb == 0 {
+            break; // terminator
+        }
+        if cb < 3 {
+            break; // cannot hold a class byte — cannot make progress
+        }
+        let end = match pos.checked_add(cb) {
+            Some(e) if e <= data.len() => e,
+            _ => break, // cb lies / overruns the buffer — stop cleanly
+        };
+        let raw = data[pos..end].to_vec();
+        let class = raw[2];
+        items.push(decode_item(class, raw));
+        pos = end;
+    }
+    items
 }
 
 /// Reconstruct a human-readable path from a parsed item list by joining each
@@ -25,7 +42,6 @@ pub fn reconstruct_path(items: &[ShellItem]) -> String {
     String::new()
 }
 
-#[allow(dead_code)]
 fn decode_item(class: u8, raw: Vec<u8>) -> ShellItem {
     ShellItem {
         class,
