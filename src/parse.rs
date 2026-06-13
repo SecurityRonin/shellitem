@@ -222,6 +222,70 @@ fn decode_root(class: u8, raw: Vec<u8>) -> ShellItem {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
+mod reconstruct_tests {
+    use super::*;
+    use crate::{ShellItem, ShellItemKind};
+
+    fn item_named(long: Option<&str>, short: Option<&str>, guid: Option<&str>) -> ShellItem {
+        ShellItem {
+            class: 0x32,
+            kind: ShellItemKind::FileEntry,
+            name: short.map(ToString::to_string),
+            long_name: long.map(ToString::to_string),
+            file_size: None,
+            modified: None,
+            created: None,
+            accessed: None,
+            mft_entry: None,
+            mft_sequence: None,
+            guid: guid.map(ToString::to_string),
+            raw: vec![0, 0],
+        }
+    }
+
+    #[test]
+    fn joins_display_names_with_backslash() {
+        let items = vec![
+            item_named(None, None, Some("My Computer")),
+            item_named(None, Some("C:\\"), None),
+            item_named(Some("Users"), Some("USERS"), None),
+            item_named(Some("secret report.docx"), Some("SECRET~1.DOC"), None),
+        ];
+        assert_eq!(
+            reconstruct_path(&items),
+            "My Computer\\C:\\\\Users\\secret report.docx"
+        );
+    }
+
+    #[test]
+    fn prefers_long_name_then_short_then_guid() {
+        // Each item exercises a different precedence tier.
+        let items = vec![
+            item_named(Some("long"), Some("short"), Some("guid")),
+            item_named(None, Some("short"), Some("guid")),
+            item_named(None, None, Some("GUID-ONLY")),
+        ];
+        assert_eq!(reconstruct_path(&items), "long\\short\\GUID-ONLY");
+    }
+
+    #[test]
+    fn skips_items_with_no_display_name() {
+        let items = vec![
+            item_named(None, Some("C:\\"), None),
+            item_named(None, None, None), // no usable label — skipped
+            item_named(Some("file.txt"), None, None),
+        ];
+        assert_eq!(reconstruct_path(&items), "C:\\\\file.txt");
+    }
+
+    #[test]
+    fn empty_list_yields_empty_path() {
+        assert_eq!(reconstruct_path(&[]), "");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod framing_tests {
     use super::*;
 
