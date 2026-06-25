@@ -1,6 +1,6 @@
 [package]
 name = "shellitem"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.81"
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ categories = ["parser-implementations"]
 exclude = ["/tests/data", "/fuzz", "/docs", "/.github", "/mkdocs.yml", "/.pre-commit-config.yaml", "/renovate.json"]
 
 [dependencies]
-forensicnomicon = "0.5.1"
+forensicnomicon = "0.11"
 
 # ── Paranoid Gatekeeper ──────────────────────────────────────────────────────
 # This crate parses untrusted, attacker-controllable shell-item blobs lifted

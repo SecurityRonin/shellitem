@@ -347,7 +347,7 @@ mod framing_tests {
     #[test]
     fn raw_bytes_are_preserved_per_item() {
         let raw0 = item(0x1F, &[0xAA; 16]);
-        let blob = list(&[raw0.clone()]);
+        let blob = list(std::slice::from_ref(&raw0));
         let items = parse_idlist(&blob);
         assert_eq!(items[0].raw, raw0);
     }
