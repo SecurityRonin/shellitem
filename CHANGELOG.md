@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.1](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.0...shellitem-v0.2.1) - 2026-07-25
+
+### Documentation
+
+- use verbatim Apache-2.0 license text
+
+### Fixed
+
+- *(vet)* declare own crates first-party so version bumps don't break supply-chain audit
+
 ## 0.1.0 — 2026-06-13
 
 Initial release. `parse_idlist` + `reconstruct_path` over Windows `ITEMIDLIST`
