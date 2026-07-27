@@ -63,7 +63,7 @@ pub(crate) fn ascii_z(data: &[u8], off: usize) -> String {
 #[must_use]
 pub(crate) fn utf16_z(data: &[u8], off: usize) -> String {
     let Some(slice) = data.get(off..) else {
-        return String::new(); // cov:unreachable: off is always derived from within-bounds field positions
+        return String::new();
     };
     let mut units = Vec::new();
     let mut i = 0;
@@ -90,4 +90,23 @@ pub(crate) fn guid(data: &[u8], off: usize) -> Option<String> {
         "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
         g[3], g[2], g[1], g[0], g[5], g[4], g[7], g[6], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g[15],
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utf16_z_offset_past_end_returns_empty() {
+        // `off` beyond the buffer must degrade to an empty string, never panic —
+        // the Paranoid Gatekeeper contract for attacker-controlled offsets.
+        assert_eq!(utf16_z(&[0x41, 0x00], 8), "");
+    }
+
+    #[test]
+    fn utf16_z_decodes_until_nul_and_ignores_trailing_bytes() {
+        // "Hi" then a UTF-16 NUL; trailing bytes after the NUL are ignored.
+        let data = [0x48, 0x00, 0x69, 0x00, 0x00, 0x00, 0x5A, 0x00];
+        assert_eq!(utf16_z(&data, 0), "Hi");
+    }
 }

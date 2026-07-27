@@ -166,9 +166,7 @@ fn parse_beef0004(item: &mut ShellItem, block_start: usize) {
     if long_name_offset != 0 {
         let abs = block_off.saturating_add(long_name_offset);
         let long = reader::utf16_z(&data, abs);
-        if !long.is_empty() {
-            item.long_name = Some(long);
-        }
+        item.long_name = (!long.is_empty()).then_some(long);
     }
 
     // Version >= 7 carries 2 unknown bytes then the 8-byte NTFS file reference
@@ -701,6 +699,46 @@ mod file_entry_tests {
         item.extend_from_slice(&body);
         let items = parse_idlist(&list_one(item));
         assert!(items[0].modified.is_none());
+    }
+
+    #[test]
+    fn beef0004_long_name_offset_out_of_range_leaves_long_name_none() {
+        // A malformed/truncated block can declare a non-zero long-name offset
+        // that points past the buffer. utf16_z bounds-checks it to an empty
+        // string, so long_name must stay None — no panic, no bogus name.
+        let mut body = Vec::new();
+        body.push(0x32);
+        body.push(0x00);
+        body.extend_from_slice(&100u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(b"TRUNC~1.TXT\0"); // 12 bytes -> 16-bit aligned
+        let mut block = Vec::new();
+        block.extend_from_slice(&[0u8, 0u8]); // size
+        block.extend_from_slice(&8u16.to_le_bytes()); // version 8
+        block.extend_from_slice(&0xBEEF_0004u32.to_le_bytes());
+        block.extend_from_slice(&0u32.to_le_bytes()); // created
+        block.extend_from_slice(&0u32.to_le_bytes()); // accessed
+        let lno_pos = block.len();
+        // Long-name offset points far past the end of the buffer; abs saturates
+        // and utf16_z returns "".
+        block.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        block.extend_from_slice(&[0u8, 0u8]); // unknown
+        block.extend_from_slice(&0u64.to_le_bytes()[..6]); // MFT entry
+        block.extend_from_slice(&0u16.to_le_bytes()); // MFT seq
+        block.extend_from_slice(&0u16.to_le_bytes()); // first ext offset
+        let bs = block.len() as u16;
+        block[0..2].copy_from_slice(&bs.to_le_bytes());
+        // (lno_pos already holds 0xFFFF; leave it)
+        let _ = lno_pos;
+        body.extend_from_slice(&block);
+        let cb = (2 + body.len()) as u16;
+        let mut item = cb.to_le_bytes().to_vec();
+        item.extend_from_slice(&body);
+
+        let items = parse_idlist(&list_one(item));
+        assert_eq!(items[0].name.as_deref(), Some("TRUNC~1.TXT"));
+        assert!(items[0].long_name.is_none());
     }
 
     #[test]
