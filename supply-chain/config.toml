@@ -18,15 +18,3 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 
 [policy.shellitem]
 audit-as-crates-io = false
-
-[[exemptions.forensicnomicon]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.forensicnomicon-core]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.forensicnomicon-data]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
