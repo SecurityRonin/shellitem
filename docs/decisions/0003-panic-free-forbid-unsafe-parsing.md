@@ -41,10 +41,13 @@ a length field.
   the `unsafe-forbidden` badge.
 - A truncated or hostile blob degrades to a partial-but-sound result, never a
   crash of the consuming analyzer (ADR 0005).
-- **Known gap — the dynamic partner is not yet committed.** The static lints
-  make panics unreachable by construction; a `cargo-fuzz` target over
-  `parse_idlist` is the empirical check that the README and CHANGELOG advertise
-  ("fuzzed"), but `fuzz/fuzz_targets/` is currently empty and no target exists in
-  history. Likewise there is no `ci.yml` yet to run clippy `-D warnings`, the
-  low-MSRV job, or a coverage gate. Leading claim here is the *verifiable* static
-  posture; the fuzz target and CI wiring remain outstanding work.
+- **The dynamic partner is committed** (`fuzz/`, 2026-08-01). The static lints
+  make panics unreachable *by construction*; two `cargo-fuzz` targets test that
+  empirically — `idlist` drives `parse_idlist` alone, `pipeline` drives
+  `parse_idlist` → `reconstruct_path` → `display_name`. First run: no crashes in
+  8.2M and 9.1M executions respectively (local, aarch64-apple-darwin,
+  libFuzzer 120s each). `ci.yml` now runs clippy `-D warnings`, the low-MSRV
+  job, the coverage gate, and a 30s smoke-fuzz of each target on every PR.
+  Fuzzing shows present-robustness over N executions; it does not prove the
+  absence of a panicking input, which is why the lints — not the exec count —
+  remain the load-bearing guarantee.

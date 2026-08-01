@@ -84,7 +84,8 @@ path reconstruction — see `git log`) over spec-exact `ITEMIDLIST` fixtures
 derived from libfwsi. The static robustness posture is `forbid(unsafe_code)`
 plus `unwrap_used`/`expect_used = deny` with bounds-checked readers (ADR 0003).
 
-A dynamic fuzz target over `parse_idlist` is the intended partner to the static
-posture and the README/CHANGELOG advertise it; the `fuzz/` harness is scaffolded
-but **no fuzz target is committed yet** — an outstanding gap tracked in ADR 0003,
-alongside the absence of a `ci.yml` to run the low-MSRV and coverage jobs.
+The dynamic partner to that static posture is `fuzz/`: two `cargo-fuzz` targets
+over arbitrary bytes — `idlist` (`parse_idlist` alone) and `pipeline`
+(`parse_idlist` → `reconstruct_path` → `display_name`). Neither crashed in its
+first run (8.2M and 9.1M executions respectively); `ci.yml` smoke-fuzzes both for
+30s on every PR alongside the low-MSRV and coverage jobs (ADR 0003).

@@ -19,7 +19,8 @@ Class/extension constants come from `forensicnomicon::shellbags`; the spec is
 libyal's *Windows Shell Item format*.
 
 **Consumers:** `lnk-core` (LinkTargetIDList), `winreg-artifacts` (ShellBags),
-Jump Lists. Panic-free on untrusted input, `forbid(unsafe_code)`, fuzzed.
+Jump Lists. Panic-free by lint (`forbid(unsafe_code)`, `unwrap_used`/`expect_used`
+denied) and fuzzed over `parse_idlist` and the full parse → path pipeline.
 
 ---
 
