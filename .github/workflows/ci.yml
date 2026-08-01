@@ -111,10 +111,11 @@ jobs:
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - name: Install cargo-fuzz
-        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
-        with:
-          tool: cargo-fuzz
+      # Built from source on the runner, not fetched via taiki-e/install-action:
+      # the prebuilt Linux cargo-fuzz is musl-linked, and cargo-fuzz defaults
+      # --target to its own build triple. That yields x86_64-unknown-linux-musl,
+      # which fails "sanitizer is incompatible with statically linked libc".
+      - run: cargo install cargo-fuzz
       - name: Build all fuzz targets
         run: cargo +nightly fuzz check
       - name: Smoke-fuzz each target (30s)
