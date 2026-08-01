@@ -51,7 +51,7 @@ cargo llvm-cov --workspace --lib --show-missing-lines   # 100% line coverage
   ```bash
   rustup install nightly
   cargo install cargo-fuzz
-  cargo +nightly fuzz run shelllink     # or: forensic
+  cargo +nightly fuzz run idlist        # or: pipeline
   ```
 
   If the reader gains new structure handling, extend or add the matching fuzz
