@@ -57,7 +57,9 @@ Format constants (class bytes, the `0xbeef0004`/`0xbeef0026` extension signature
 
 ## Trust but verify
 
-Panic-free on untrusted input (every `cb`/offset range-checked before use; UTF-16 decoded lossily; DOS-date conversion overflow-guarded), `#![forbid(unsafe_code)]`, and fuzzed over `parse_idlist`. Validated against spec-exact `ITEMIDLIST` fixtures derived from libfwsi.
+- **Fuzzed** — two `cargo-fuzz` targets drive arbitrary bytes: `idlist` (`parse_idlist` alone) and `pipeline` (`parse_idlist` → `reconstruct_path` → `display_name`). No crashes in 8.2M and 9.1M executions respectively; CI smoke-fuzzes both on every PR.
+- **Panic-free by lint** — `unsafe_code = "forbid"` with `unwrap_used`/`expect_used` denied, so every `cb`/offset is range-checked before use, UTF-16 is decoded lossily, and DOS-date conversion is overflow-guarded.
+- **Validated** against spec-exact `ITEMIDLIST` fixtures derived from libfwsi.
 
 ---
 
