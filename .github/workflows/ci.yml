@@ -98,6 +98,31 @@ jobs:
           print("All production lines covered.")
           PY
 
+  fuzz:
+    name: Fuzz targets (nightly smoke)
+    runs-on: ubuntu-latest
+    env:
+      # cargo-fuzz supplies its own sanitizer/coverage RUSTFLAGS; an inherited
+      # value would be overwritten rather than appended to.
+      RUSTFLAGS: ""
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch ref; nightly selected below
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
+        with:
+          tool: cargo-fuzz
+      - name: Build all fuzz targets
+        run: cargo +nightly fuzz check
+      - name: Smoke-fuzz each target (30s)
+        run: |
+          for t in idlist pipeline; do
+            cargo +nightly fuzz run "$t" -- -max_total_time=30 -rss_limit_mb=4096
+          done
+
   deny:
     name: cargo-deny (bans/licenses/sources)
     runs-on: ubuntu-latest
