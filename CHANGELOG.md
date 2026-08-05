@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.2](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.1...shellitem-v0.2.2) - 2026-08-05
+
+### Documentation
+
+- replace the unearned "fuzzed" claim with measured exec counts
+
+### Fixed
+
+- *(supply-chain)* trust our own crates instead of exempting them
+
 ## [0.2.1](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.0...shellitem-v0.2.1) - 2026-07-25
 
 ### Documentation
