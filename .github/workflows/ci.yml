@@ -9,138 +9,23 @@ on:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
-
 jobs:
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --all --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo test --workspace --all-features
-
-  check-msrv:
-    name: Check MSRV (1.81)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@1.81.0
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo build --workspace --all-features --locked
-
-  coverage:
-    name: Coverage (100% production lines)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@59012be0884e296ca2da49b530610e72c49039ad # v2.81.6
-        with:
-          tool: cargo-llvm-cov
-      - name: Fail on any uncovered production line (DA:n,0), honoring cov:unreachable
-        run: |
-          cargo llvm-cov --all-features --lcov --output-path cov.lcov
-          python3 - <<'PY'
-          import sys
-          def marked(path, n):
-              try:
-                  return "cov:unreachable" in open(path).read().splitlines()[n - 1]
-              except Exception:
-                  return False
-          cur, bad = None, []
-          for line in open("cov.lcov").read().splitlines():
-              if line.startswith("SF:"):
-                  cur = line[3:]
-              elif line.startswith("DA:") and cur:
-                  if "/tests/" in cur or "/fuzz/" in cur:
-                      continue
-                  n, hits = line[3:].split(",")
-                  if hits == "0" and not marked(cur, int(n)):
-                      bad.append(f"{cur}:{n}")
-          if bad:
-              print("Uncovered production lines — add a test or // cov:unreachable:")
-              for b in bad:
-                  print("  " + b)
-              sys.exit(1)
-          print("All production lines covered.")
-          PY
-
-  fuzz:
-    name: Fuzz targets (nightly smoke)
-    runs-on: ubuntu-latest
-    env:
-      # cargo-fuzz supplies its own sanitizer/coverage RUSTFLAGS; an inherited
-      # value would be overwritten rather than appended to.
-      RUSTFLAGS: ""
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch ref; nightly selected below
-        with:
-          toolchain: nightly
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      # Built from source on the runner, not fetched via taiki-e/install-action:
-      # the prebuilt Linux cargo-fuzz is musl-linked, and cargo-fuzz defaults
-      # --target to its own build triple. That yields x86_64-unknown-linux-musl,
-      # which fails "sanitizer is incompatible with statically linked libc".
-      - run: cargo install cargo-fuzz
-      - name: Build all fuzz targets
-        run: cargo +nightly fuzz check
-      - name: Smoke-fuzz each target (30s)
-        run: |
-          for t in idlist pipeline; do
-            cargo +nightly fuzz run "$t" -- -max_total_time=30 -rss_limit_mb=4096
-          done
-
-  deny:
-    name: cargo-deny (bans/licenses/sources)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          command: check bans licenses sources
-
-  advisories:
-    name: cargo-deny (advisories)
-    runs-on: ubuntu-latest
-    # Informational: a malformed entry in the upstream RustSec advisory-db breaks
-    # DB *loading* for the whole ecosystem and must not gate our build.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          command: check advisories
+  # fmt · clippy · test (3 OS) · MSRV · cargo-deny · cargo-vet · secret scan ·
+  # fuzz build-check · rustdoc · 100% per-line coverage · path-dep gate.
+  #
+  # No inputs. The old `coverage` job enforced 100% per-line at
+  # `--all-features`, failing on any `DA:n,0` that did not carry
+  # `// cov:unreachable` — exactly the shared workflow's default gate. This is a
+  # single-crate repo, so the default `--workspace` covers the same code the old
+  # run did, and the one existing marker carries a reason, so the default
+  # `require-exemption-reason: true` holds. MSRV is read from rust-version
+  # (1.81), which is what the old `check-msrv` job pinned by hand.
+  #
+  # The old gate also skipped paths containing `/tests/` and `/fuzz/`. Not
+  # carried across as an input: `coverage-ignore-regex` is interpolated
+  # UNQUOTED into the coverage job's shell, so the `(tests|fuzz)` alternation
+  # needed to express it would abort the job with a bash syntax error. It is a
+  # no-op in practice — the fuzz crate is outside the workspace so llvm-cov
+  # never reports it, and test code executes during the run it is measured by.
+  ci:
+    uses: SecurityRonin/fleet-ci/.github/workflows/rust-ci.yml@a62ab10603151071744cec0b4e3638aa6406d4e4
