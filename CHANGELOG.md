@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.3](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.2...shellitem-v0.2.3) - 2026-08-09
+
+### Fixed
+
+- *(gitignore)* unanchor the target rule so nested cargo projects are ignored
+
 ## [0.2.2](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.1...shellitem-v0.2.2) - 2026-08-05
 
 ### Documentation
