@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.2...shellitem-v0.2.3) - 2026-08-20
+
+### Fixed
+
+- *(msrv)* lower the declared floor to 1.75, which is the measured one ([#13](https://github.com/SecurityRonin/shellitem/pull/13))
+- *(gitignore)* unanchor the target rule so nested cargo projects are ignored
+
 ## [0.2.2](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.1...shellitem-v0.2.2) - 2026-08-05
 
 ### Documentation
