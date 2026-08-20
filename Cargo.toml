@@ -2,7 +2,7 @@
 name = "shellitem"
 version = "0.2.2"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.75"
 license = "Apache-2.0"
 authors = ["Albert Hui <albert@securityronin.com>"]
 description = "Windows Shell Item / ITEMIDLIST (PIDL) parser — decode shell-item blobs from .lnk LinkTargetIDList and registry ShellBags into typed items and a reconstructed path. A reusable forensic primitive, no findings."
