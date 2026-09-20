@@ -29,21 +29,21 @@ dependencies = [
 
 [[package]]
 name = "shellitem"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "shellitem-core",
 ]
 
 [[package]]
 name = "shellitem-core"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "forensicnomicon",
 ]
 
 [[package]]
 name = "shellitem-forensic"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "forensicnomicon",
  "shellitem-core",
