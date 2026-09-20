@@ -9,17 +9,18 @@
 
 **Decode a Windows `ITEMIDLIST` (PIDL) blob into typed shell items and a reconstructed path — the reusable primitive behind LNK `LinkTargetIDList`, registry ShellBags, and Jump Lists.**
 
-A shell item is one component of the Windows shell namespace serialization (`ITEMIDLIST`): a volume, a folder, a file (with its short *and* long name, size, MAC timestamps, and NTFS MFT reference), a network share, or a known-folder GUID. The exact same blob format appears in many artifacts, so the parser belongs in one place — like `xpress-huffman` or `lznt1`, this is a **decoder primitive, not an analyzer** (it emits no findings; the forensic interpretation lives in the consuming crates).
+A shell item is one component of the Windows shell namespace serialization (`ITEMIDLIST`): a volume, a folder, a file (with its short *and* long name, size, MAC timestamps, and NTFS MFT reference), a network share, or a known-folder GUID. The exact same blob format appears in many artifacts, so the parser belongs in one place — the **reader** (`shellitem-core`) emits no findings, and the **analyzer** (`shellitem-forensic`) grades what it decoded — bidirectional-control codepoints in a name, a long name whose extension contradicts its 8.3 short name, and inverted or impossible timestamps. The published `shellitem` crate remains as a re-export of the reader, so existing code keeps working.
 
 ## Parse a PIDL in 30 seconds
 
 ```toml
 [dependencies]
-shellitem = "0.1"
+shellitem-core = "0.2"       # the reader
+shellitem-forensic = "0.2"   # the anomaly auditor (optional)
 ```
 
 ```rust
-use shellitem::{parse_idlist, reconstruct_path};
+use shellitem_core::{parse_idlist, reconstruct_path};
 
 let items = parse_idlist(pidl_bytes);          // Vec<ShellItem>, lenient + panic-free
 let path  = reconstruct_path(&items);          // "C:\\Users\\beth\\Downloads\\evil.exe"

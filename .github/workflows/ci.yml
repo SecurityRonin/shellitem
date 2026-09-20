@@ -15,11 +15,13 @@ jobs:
   #
   # No inputs. The old `coverage` job enforced 100% per-line at
   # `--all-features`, failing on any `DA:n,0` that did not carry
-  # `// cov:unreachable` — exactly the shared workflow's default gate. This is a
-  # single-crate repo, so the default `--workspace` covers the same code the old
-  # run did, and the one existing marker carries a reason, so the default
-  # `require-exemption-reason: true` holds. MSRV is read from rust-version
-  # (1.81), which is what the old `check-msrv` job pinned by hand.
+  # `// cov:unreachable` — exactly the shared workflow's default gate. Since the
+  # ADR-0008 split this is a THREE-crate workspace (shellitem facade,
+  # shellitem-core reader, shellitem-forensic analyzer); `--workspace` is what
+  # makes the gate see all three, and `--lib` would silently miss the
+  # analyzer's integration tests. The one existing marker carries a reason, so
+  # the default `require-exemption-reason: true` holds. MSRV is read from
+  # rust-version, which is what the old `check-msrv` job pinned by hand.
   #
   # The old gate also skipped paths containing `/tests/` and `/fuzz/`. Not
   # carried across as an input: `coverage-ignore-regex` is interpolated

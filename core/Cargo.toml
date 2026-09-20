@@ -1,0 +1,19 @@
+[package]
+name = "shellitem-core"
+description = "Windows Shell Item / ITEMIDLIST (PIDL) reader — decode shell-item blobs from .lnk LinkTargetIDList and registry ShellBags into typed items and a reconstructed path. Reader only; findings live in shellitem-forensic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords = ["forensics", "shell-item", "pidl", "itemidlist", "windows"]
+categories = ["parser-implementations"]
+
+[dependencies]
+forensicnomicon = "1"
+
+[lints]
+workspace = true

@@ -1,7 +1,7 @@
 # 1. shellitem is a single-crate decoder primitive, not a reader/analyzer pair
 
 Date: 2026-07-24
-Status: Accepted
+Status: Accepted — points 1 and 2 **superseded in part** by [ADR-0008](0008-adopt-the-reader-analyzer-split.md): shellitem is a parser, not a codec, so it owes an analyzer. Point 3 still holds.
 
 ## Context
 

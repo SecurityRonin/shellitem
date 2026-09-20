@@ -102,7 +102,14 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "shellitem"
-version = "0.2.1"
+version = "0.2.3"
+dependencies = [
+ "shellitem-core",
+]
+
+[[package]]
+name = "shellitem-core"
+version = "0.2.3"
 dependencies = [
  "forensicnomicon",
 ]

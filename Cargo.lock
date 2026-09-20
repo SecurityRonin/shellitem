@@ -31,5 +31,20 @@ dependencies = [
 name = "shellitem"
 version = "0.2.3"
 dependencies = [
+ "shellitem-core",
+]
+
+[[package]]
+name = "shellitem-core"
+version = "0.2.3"
+dependencies = [
  "forensicnomicon",
+]
+
+[[package]]
+name = "shellitem-forensic"
+version = "0.2.3"
+dependencies = [
+ "forensicnomicon",
+ "shellitem-core",
 ]

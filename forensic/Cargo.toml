@@ -1,0 +1,20 @@
+[package]
+name = "shellitem-forensic"
+description = "Anomaly auditor for Windows Shell Items — surfaces bidi-override display spoofing, extension mismatches, implausible or inverted timestamps and unrecognised item classes as forensicnomicon findings."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords = ["forensics", "shell-item", "pidl", "shellbags", "windows"]
+categories = ["parser-implementations"]
+
+[dependencies]
+shellitem-core.workspace = true
+forensicnomicon.workspace = true
+
+[lints]
+workspace = true
