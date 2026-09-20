@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.3...shellitem-v0.3.0) - 2026-09-20
+
+### Added
+
+- *(forensic)* split into reader + analyzer behind a shellitem facade
+
 ## [0.2.3](https://github.com/SecurityRonin/shellitem/compare/shellitem-v0.2.2...shellitem-v0.2.3) - 2026-08-20
 
 ### Fixed
